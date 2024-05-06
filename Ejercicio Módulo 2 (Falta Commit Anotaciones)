@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.25;
+
+contract Subasta {
+    address public creador;
+    uint256 public valorInicial;
+    uint256 public fechaInicio;
+    uint256 public duracion;
+    uint256 public mayorOferta;
+    address public ofertanteGanador;
+    mapping(address => uint256) public ofertas;
+
+    event NuevaOferta(address ofertante, uint256 oferta, bool secreta);
+    event SubastaFinalizada(address ganador, uint256 oferta);
+
+    modifier soloCreador() {
+        require(msg.sender == creador, "Solo el creador puede realizar esta accion");
+        _;
+    }
+
+    constructor(uint256 _valorInicial, uint256 _fechaInicio, uint256 _duracion) {
+        creador = msg.sender;
+        valorInicial = _valorInicial;
+        fechaInicio = _fechaInicio;
+        duracion = _duracion;
+    }
+
+    function iniciarSubasta() public view {
+        require(block.timestamp >= fechaInicio, "La subasta no ha comenzado");
+    }
+
+    function ofertar(bool _secreta, uint256 _monto) public payable {
+        require(msg.value >= valorInicial, "La oferta debe ser al menos igual al valor inicial");
+        require(block.timestamp < fechaInicio + duracion, "La subasta ha finalizado");
+        require(_monto > mayorOferta, "El monto de la oferta debe ser mayor a la oferta actual");
+
+        if (_secreta) {
+            ofertas[msg.sender] = _monto;
+            emit NuevaOferta(msg.sender, _monto, true);
+        } else {
+            require(msg.value == _monto, "El monto enviado debe ser igual al monto de la oferta");
+            ofertas[msg.sender] += msg.value;
+            emit NuevaOferta(msg.sender, msg.value, false);
+        }
+
+        mayorOferta = _monto;
+        ofertanteGanador = msg.sender;
+    }
+
+    function finalizarSubasta() public soloCreador {
+        require(block.timestamp >= fechaInicio + duracion, "La subasta aun no ha finalizado");
+        emit SubastaFinalizada(ofertanteGanador, mayorOferta);
+        payable(ofertanteGanador).transfer(mayorOferta);
+    }
+
+    function mostrarGanador() public view returns (address, uint256) {
+        return (ofertanteGanador, mayorOferta);
+    }
+
+    function mostrarOfertas() public view returns (address[] memory, uint256[] memory) {
+        uint256 length = 0;
+        for (uint256 i = 0; i < msg.sender.balance; i++) {
+            if (ofertas[msg.sender] > 0) {
+                length++;
+            }
+        }
+
+        address[] memory ofertantes = new address[](length);
+        uint256[] memory montos = new uint256[](length);
+
+        uint256 index = 0;
+        for (uint256 i = 0; i < msg.sender.balance; i++) {
+            if (ofertas[msg.sender] > 0) {
+                ofertantes[index] = msg.sender;
+                montos[index] = ofertas[msg.sender];
+                index++;
+            }
+        }
+
+        return (ofertantes, montos);
+    }
+}
